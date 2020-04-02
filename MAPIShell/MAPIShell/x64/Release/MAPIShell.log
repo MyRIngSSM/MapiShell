@@ -1,0 +1,18 @@
+﻿  Main.cpp
+A:\Users\SaharN\source\repos\MAPIShell\MAPIShell\Main.cpp(90,20): warning C4477: 'printf' : format string '%s' requires an argument of type 'char *', but variadic argument 1 has type 'LPTSTR'
+A:\Users\SaharN\source\repos\MAPIShell\MAPIShell\Main.cpp(90,20): message : consider using '%ls' in the format string
+A:\Users\SaharN\source\repos\MAPIShell\MAPIShell\Main.cpp(90,20): message : consider using '%lls' in the format string
+A:\Users\SaharN\source\repos\MAPIShell\MAPIShell\Main.cpp(90,20): message : consider using '%Ls' in the format string
+A:\Users\SaharN\source\repos\MAPIShell\MAPIShell\Main.cpp(90,20): message : consider using '%ws' in the format string
+A:\Users\SaharN\source\repos\MAPIShell\MAPIShell\Main.cpp(90,20): warning C4477: 'printf' : format string '%s' requires an argument of type 'char *', but variadic argument 2 has type 'LPTSTR'
+A:\Users\SaharN\source\repos\MAPIShell\MAPIShell\Main.cpp(90,20): message : consider using '%ls' in the format string
+A:\Users\SaharN\source\repos\MAPIShell\MAPIShell\Main.cpp(90,20): message : consider using '%lls' in the format string
+A:\Users\SaharN\source\repos\MAPIShell\MAPIShell\Main.cpp(90,20): message : consider using '%Ls' in the format string
+A:\Users\SaharN\source\repos\MAPIShell\MAPIShell\Main.cpp(90,20): message : consider using '%ws' in the format string
+  Generating code
+A:\Users\SaharN\source\repos\MAPIShell\MAPIShell\Main.cpp(24): warning C4715: 'WinMain': not all control paths return a value
+  1 of 3 functions (33.3%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    0 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  MAPIShell.vcxproj -> A:\Users\SaharN\source\repos\MAPIShell\x64\Release\MAPIShell.exe

@@ -1,0 +1,7 @@
+﻿  Main.cpp
+  MapiUtil.cpp
+  Generating Code...
+A:\Users\SaharN\source\repos\MAPIShell\MAPIShell\Main.cpp(23): warning C4715: 'WinMain': not all control paths return a value
+A:\Users\SaharN\source\repos\MAPIShell\MAPIShell\Main.cpp(45): warning C4715: 'SendMail': not all control paths return a value
+Initialize.obj : warning LNK4075: ignoring '/EDITANDCONTINUE' due to '/INCREMENTAL:NO' specification
+  MAPIShell.vcxproj -> A:\Users\SaharN\source\repos\MAPIShell\Debug\MAPIShell.exe

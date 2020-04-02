@@ -1,0 +1,9 @@
+﻿  Initialize.cpp
+  Main.cpp
+  Generating code
+  1 of 2 functions (50.0%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    0 functions had inline decision re-evaluated but remain unchanged
+A:\Users\SaharN\source\repos\MAPIShell\MAPIShell\Main.cpp(23): warning C4715: 'WinMain': not all control paths return a value
+  Finished generating code
+  MAPIShell.vcxproj -> A:\Users\SaharN\source\repos\MAPIShell\Release\MAPIShell.exe
