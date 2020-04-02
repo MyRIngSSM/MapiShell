@@ -31,3 +31,7 @@
 *.out
 *.app
 /MAPIShell/.vs
+
+Debug
+Release
+x64
