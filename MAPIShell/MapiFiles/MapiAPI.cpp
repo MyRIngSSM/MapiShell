@@ -1,24 +1,79 @@
 #include "MAPIShell.h"
 #include "MapiUtil.h"
+#include "MapiNotify.h"
 
-STDMETHODIMP SendMail(LPMAPISESSION lpMAPISession, CString szSubject, CString szBody, std::vector<CString> lpRecipients, CString szSenderName)
+STDMETHODIMP SendMail(LPMAPISESSION lpMAPISession, LPMDB lpMDB, CString szSubject, CString szBody, std::vector<CString> lpRecipients, CString szSenderName)
 {
-    LPMDB lpMDB = NULL;
     LPMAPIFOLDER lpFolder = NULL;
+    LPMAPIFOLDER lpInboxFolder = NULL;
+    LPMAPIFOLDER lpRootFolder = NULL;
+    LPMAPIFOLDER lpNewFolder = NULL;
     LPMAPIPROP lpMessage = NULL;
-
-    HRESULT hRes = OpenDefaultMessageStore(lpMAPISession, &lpMDB);
-    if (hRes != S_OK) goto quit;
+    LPSPropValue prop;
+    SPropValue propIPC = {};
+    ULONG ulObjType = NULL;
+    HRESULT hRes;
 
     hRes = OpenFolder(lpMDB, &lpFolder, PR_IPM_OUTBOX_ENTRYID);
+    hRes = OpenInbox(lpMDB, &lpInboxFolder);
     if (hRes != S_OK) goto quit;
+    
+    //////////////////////////////////////////////////////////////////////
 
+    hRes = HrGetOneProp(
+        lpMDB,
+        PR_IPM_SUBTREE_ENTRYID,
+        &prop);
+    if (FAILED(hRes)) goto quit;
+
+    hRes = lpMDB->OpenEntry(prop->Value.bin.cb, (LPENTRYID)prop->Value.bin.lpb, NULL, MAPI_MODIFY, &ulObjType, (LPUNKNOWN*)&lpRootFolder);
+
+    hRes = HrGetOneProp(
+        lpRootFolder,
+        PR_ACCESS_LEVEL,
+        &prop);
+    if (FAILED(hRes)) goto quit;
+
+    hRes = lpRootFolder->CreateFolder(FOLDER_GENERIC, (LPTSTR)"Test", (LPTSTR)"Test", NULL, OPEN_IF_EXISTS, &lpNewFolder);
+    lpNewFolder->SaveChanges(KEEP_OPEN_READWRITE);
+
+    hRes = HrGetOneProp(
+        lpNewFolder,
+        PR_ENTRYID,
+        &prop);
+    if (FAILED(hRes)) goto quit;
+
+    hRes = lpMDB->SetReceiveFolder((LPTSTR)"IPM.Command", 0, prop->Value.bin.cb, (LPENTRYID)prop->Value.bin.lpb);
+    ///////////////////////////////////////////////////////////////////////
     hRes = lpFolder->CreateMessage(NULL, 0, (LPMESSAGE*)&lpMessage);
     if (hRes != S_OK) goto quit;
+    /////////////////////////////////////////////////////////////////////
+    propIPC.dwAlignPad = 0;
+    propIPC.ulPropTag = PR_MESSAGE_CLASS;
+    propIPC.Value.lpszA = (LPSTR)"IPM.Command";
+
+    hRes = HrSetOneProp(
+        lpMessage,
+        &propIPC);
+    if (FAILED(hRes)) goto quit;
+
+    hRes = HrGetOneProp(
+        lpMessage,
+        PR_MESSAGE_CLASS,
+        &prop);
+    if (FAILED(hRes)) goto quit; 
+    
+    hRes = HrGetOneProp(
+        lpFolder,
+        PR_DISPLAY_NAME_W,
+        &prop);
+    if (FAILED(hRes)) goto quit;
+
+    /////////////////////////////////////////////////////////////////////
 
     hRes = BuildEmail(lpMAPISession, lpMDB, lpMessage, szSubject, szBody, lpRecipients, szSenderName);
     if (hRes != S_OK) goto quit;
-
+    
     hRes = ((LPMESSAGE)lpMessage)->SubmitMessage(0);
     if (hRes != S_OK) goto quit;
 
@@ -176,7 +231,7 @@ quit:
     return hRes;
 }
 
-STDMETHODIMP OpenDefaultMessageStore(LPMAPISESSION lpMAPISession, LPMDB* lpMDB)
+STDMETHODIMP OpenDefaultMessageStore(LPMAPISESSION lpMAPISession, LPMDB* lpMDB, BOOL bOnline)
 {
     LPMAPITABLE pStoresTbl = NULL;
     LPSRowSet   pRow = NULL;
@@ -220,7 +275,7 @@ STDMETHODIMP OpenDefaultMessageStore(LPMAPISESSION lpMAPISession, LPMDB* lpMDB)
         pRow->aRow[0].lpProps[EID].Value.bin.cb,//size and...
         (LPENTRYID)pRow->aRow[0].lpProps[EID].Value.bin.lpb,//value of entry to open
         NULL,//Use default interface (IMsgStore) to open store
-        MAPI_BEST_ACCESS,//Flags
+        MDB_WRITE | MDB_ONLINE ? bOnline : 0,//Flags
         &lpTempMDB);//Pointer to place the store in
     if (FAILED(hRes)) goto quit;
 
@@ -251,24 +306,24 @@ STDMETHODIMP OpenInbox(LPMDB lpMDB, LPMAPIFOLDER* lpInboxFolder)
     ULONG        ulObjType;
     HRESULT      hRes = S_OK;
     LPMAPIFOLDER lpTempFolder = NULL;
-
+    LPSTR        lppszExplicitClass;
     *lpInboxFolder = NULL;
-
+    
     //The Inbox is usually the default receive folder for the message store
     //You call this function as a shortcut to get it's Entry ID
     hRes = lpMDB->GetReceiveFolder(
-        NULL,      //Get default receive folder
+        0,//(LPSTR)"IPM",      //Get default receive folder
         NULL,      //Flags
         &cbInbox,  //Size and ...
         &lpbInbox, //Value of the EntryID to be returned
-        NULL);     //You don't care to see the class returned
+        (LPTSTR*)&lppszExplicitClass);     //You don't care to see the class returned
     if (FAILED(hRes)) goto quit;
 
     hRes = lpMDB->OpenEntry(
         cbInbox,                      //Size and...
         lpbInbox,                     //Value of the Inbox's EntryID
         NULL,                         //We want the default interface    (IMAPIFolder)
-        MAPI_BEST_ACCESS,             //Flags
+        MAPI_MODIFY,             //Flags
         &ulObjType,                   //Object returned type
         (LPUNKNOWN*)&lpTempFolder); //Returned folder
     if (FAILED(hRes)) goto quit;
@@ -320,4 +375,52 @@ STDMETHODIMP OpenFolder(LPMDB lpMDB, LPMAPIFOLDER* lpFolder, ULONG entryId)
 quit:
     MAPIFreeBuffer(lpPropArray);
     return hRes;
+}
+
+ULONG InboxCallback(LPVOID lpvContext, ULONG cNotification, LPNOTIFICATION lpNotifications);
+
+STDMETHODIMP RegisterNewMessage(LPMDB lpMDB, LPMAPIFOLDER lpFolder) {
+    HRESULT hRes = S_OK;
+    LPSPropValue prop;
+    CMAPIAdviseSink* pMapiNotifySink = new CMAPIAdviseSink();
+    IMAPIAdviseSink *lpAdviseSink = NULL;
+    ULONG_PTR ulConnection;
+
+    /*hRes = pMapiNotifySink->QueryInterface(
+        IID_IMAPIAdviseSink,
+        (VOID**)&lpAdviseSink);
+    if (FAILED(hRes)) goto quit; */
+    hRes = HrAllocAdviseSink(
+    (LPNOTIFCALLBACK)InboxCallback,
+        lpMDB,
+        &lpAdviseSink);
+    if (FAILED(hRes)) goto quit;
+
+    //ZeroMemory(*lpAdviseSink, sizeof(IMAPIAdviseSink));
+    hRes = HrGetOneProp(
+        lpFolder,
+        PR_ENTRYID,
+        &prop);
+    if (FAILED(hRes)) goto quit;
+
+    hRes = lpMDB->Advise(
+        0,//prop->Value.bin.cb,
+        0,//(LPENTRYID)prop->Value.bin.lpb,
+        fnevNewMail,
+        lpAdviseSink,
+        &ulConnection
+        );
+    if (FAILED(hRes)) goto quit;
+    
+    
+
+quit:
+    if(lpAdviseSink) lpAdviseSink->Release();
+    return hRes;
+}
+ULONG InboxCallback(LPVOID lpvContext, ULONG cNotification, LPNOTIFICATION lpNotifications)
+{
+    //MessageBox(NULL, "aaa", "bbb", NULL);
+    LPMAPIFOLDER lpFolder = (LPMAPIFOLDER)lpvContext;
+    return 1;
 }

@@ -50,9 +50,9 @@ END
 // RCDATA
 //
 
-IDR_RCDATA1             RCDATA                  "A:\\Users\\SaharN\\source\\repos\\MAPIShell\\Release\\MAPIShell.exe"
+IDR_RCDATA1             RCDATA                  "..\\Release\\MAPIShell.exe"
 
-IDR_RCDATA2             RCDATA                  "A:\\Users\\SaharN\\source\\repos\\MAPIShell\\x64\\Release\\MAPIShell.exe"
+IDR_RCDATA2             RCDATA                  "..\\x64\\Release\\MAPIShell.exe"
 
 #endif    // English (United States) resources
 /////////////////////////////////////////////////////////////////////////////

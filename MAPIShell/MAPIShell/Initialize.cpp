@@ -1,4 +1,4 @@
-#include "MAPIShell.h"
+#include "../MapiFiles/MAPIShell.h"
 
 BOOL InitializeSession(LPMAPISESSION FAR &spSession)
 {

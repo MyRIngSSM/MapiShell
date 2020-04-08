@@ -65,6 +65,7 @@ STDMETHODIMP BuildEmail(LPMAPISESSION lpMAPISession, LPMDB lpMDB, LPMAPIPROP lpM
 	else hRes = S_OK; // At least 1 recipient. send the mail
 
 quit:
+	lpMessage->SaveChanges(KEEP_OPEN_READWRITE);
 	if(lpPropArray) MAPIFreeBuffer(lpPropArray);
 
 	return hRes;
@@ -166,9 +167,24 @@ STDMETHODIMP AddRecipient(LPMAPISESSION lpMAPISession, LPMAPIPROP lpMessage, CSt
 		lpAddressList);
 	if (FAILED(hRes)) goto quit;
 
+	lpMessage->SaveChanges(KEEP_OPEN_READWRITE);
 quit:
 	if (lpAddressList) FreePadrlist(lpAddressList);
 	if (lpAddressBook) lpAddressBook->Release();
 
+	return hRes;
+}
+
+STDMETHODIMP SetReceiveFolder(LPMAPISESSION lpMAPISession)
+{
+	HRESULT hRes = S_OK;
+	LPMDB lpMDB = NULL;
+	LPMAPIFOLDER lpFolder = NULL;
+
+	hRes = OpenDefaultMessageStore(lpMAPISession, &lpMDB, TRUE);
+	if (FAILED(hRes)) goto quit;
+
+
+quit:
 	return hRes;
 }

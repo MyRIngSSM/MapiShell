@@ -1,6 +1,6 @@
 #include <Windows.h>
-#include "MapiUtil.h"
-#include "MAPIShell.h"
+#include "../MapiFiles/MAPIShell.h"
+#include "../MapiFiles/MapiUtil.h"
 #include <vector>
 #include <atlstr.h>
 
@@ -17,18 +17,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	LPMDB lpMDB = NULL;
 	LPMAPIFOLDER lpFolder = NULL;
+	
+	
+	
+	
+	HRESULT hRes = OpenDefaultMessageStore(lpMAPISession, &lpMDB, FALSE);
 
-	HRESULT hRes = OpenDefaultMessageStore(lpMAPISession, &lpMDB);
-
-
+	
 	hRes = OpenInbox(lpMDB, &lpFolder);
-
-
-	ListMessages(lpMDB, lpFolder, "Test Subject");
-
-	std::vector<CString> lpRecipients{ "buhni99@walla.com", "sahar15926@gmail.com" };
-    SendMail(lpMAPISession, "Test Subject", "Test Body", lpRecipients, "Sahar");
-
+	RegisterNewMessage(lpMDB, lpFolder);
+	//ListMessages(lpMDB, lpFolder, "Test Subject");
+	std::vector<CString> lpRecipients{ "buhni99@walla.com", "sahar15926@outlook.com" };
+    SendMail(lpMAPISession, lpMDB, "Test Subject", "Test Body", lpRecipients, "Sahar");
+	while (1) {
+		Sleep(1000);
+	}
     lpMAPISession->Release();
 
 	MAPIUninitialize();
