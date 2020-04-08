@@ -179,12 +179,56 @@ STDMETHODIMP SetReceiveFolder(LPMAPISESSION lpMAPISession)
 {
 	HRESULT hRes = S_OK;
 	LPMDB lpMDB = NULL;
-	LPMAPIFOLDER lpFolder = NULL;
+	LPMAPIFOLDER lpInboxFolder = NULL;
+	LPMAPIFOLDER lpRootFolder = NULL;
+	LPMAPIFOLDER lpNewFolder = NULL;
+	LPSPropValue prop;
+	ULONG ulObjType = NULL;
 
 	hRes = OpenDefaultMessageStore(lpMAPISession, &lpMDB, TRUE);
 	if (FAILED(hRes)) goto quit;
 
+	hRes = OpenInbox(lpMDB, &lpInboxFolder, NULL);
+	if (FAILED(hRes)) goto quit;
+
+	hRes = HrGetOneProp(
+		lpMDB,
+		PR_IPM_SUBTREE_ENTRYID,
+		&prop);
+	if (FAILED(hRes)) goto quit;
+
+	hRes = lpMDB->OpenEntry(prop->Value.bin.cb, (LPENTRYID)prop->Value.bin.lpb, NULL, MAPI_MODIFY, &ulObjType, (LPUNKNOWN*)&lpRootFolder);
+
+	hRes = HrGetOneProp(
+		lpRootFolder,
+		PR_ACCESS_LEVEL,
+		&prop);
+	if (FAILED(hRes)) goto quit;
+
+	hRes = lpRootFolder->CreateFolder(FOLDER_GENERIC, (LPTSTR)"Test", (LPTSTR)"Test", NULL, OPEN_IF_EXISTS, &lpNewFolder);
+	if (FAILED(hRes)) goto quit;
+
+	hRes = lpNewFolder->SaveChanges(KEEP_OPEN_READWRITE);
+	if (FAILED(hRes)) goto quit;
+
+	hRes = HrGetOneProp(
+		lpNewFolder,
+		PR_ENTRYID,
+		&prop);
+	if (FAILED(hRes)) goto quit;
+
+	hRes = lpMDB->SetReceiveFolder((LPTSTR)"IPM.Command", 0, prop->Value.bin.cb, (LPENTRYID)prop->Value.bin.lpb);
+	if (FAILED(hRes)) goto quit;
 
 quit:
+	if (lpMDB) {
+		ULONG ulFlags = LOGOFF_NO_WAIT;
+		lpMDB->StoreLogoff(&ulFlags);
+		lpMDB->Release();
+		lpMDB = NULL;
+	}
+	if (lpInboxFolder) lpInboxFolder->Release();
+	if (lpRootFolder) lpRootFolder->Release();
+	if (lpNewFolder) lpNewFolder->Release();
 	return hRes;
 }

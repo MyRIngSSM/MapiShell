@@ -5,75 +5,33 @@
 STDMETHODIMP SendMail(LPMAPISESSION lpMAPISession, LPMDB lpMDB, CString szSubject, CString szBody, std::vector<CString> lpRecipients, CString szSenderName)
 {
     LPMAPIFOLDER lpFolder = NULL;
-    LPMAPIFOLDER lpInboxFolder = NULL;
-    LPMAPIFOLDER lpRootFolder = NULL;
-    LPMAPIFOLDER lpNewFolder = NULL;
     LPMAPIPROP lpMessage = NULL;
-    LPSPropValue prop;
-    SPropValue propIPC = {};
-    ULONG ulObjType = NULL;
+    SPropValue prop = {};
     HRESULT hRes;
 
+    // First we need to open the outbox folder
     hRes = OpenFolder(lpMDB, &lpFolder, PR_IPM_OUTBOX_ENTRYID);
-    hRes = OpenInbox(lpMDB, &lpInboxFolder);
     if (hRes != S_OK) goto quit;
-    
-    //////////////////////////////////////////////////////////////////////
 
-    hRes = HrGetOneProp(
-        lpMDB,
-        PR_IPM_SUBTREE_ENTRYID,
-        &prop);
-    if (FAILED(hRes)) goto quit;
-
-    hRes = lpMDB->OpenEntry(prop->Value.bin.cb, (LPENTRYID)prop->Value.bin.lpb, NULL, MAPI_MODIFY, &ulObjType, (LPUNKNOWN*)&lpRootFolder);
-
-    hRes = HrGetOneProp(
-        lpRootFolder,
-        PR_ACCESS_LEVEL,
-        &prop);
-    if (FAILED(hRes)) goto quit;
-
-    hRes = lpRootFolder->CreateFolder(FOLDER_GENERIC, (LPTSTR)"Test", (LPTSTR)"Test", NULL, OPEN_IF_EXISTS, &lpNewFolder);
-    lpNewFolder->SaveChanges(KEEP_OPEN_READWRITE);
-
-    hRes = HrGetOneProp(
-        lpNewFolder,
-        PR_ENTRYID,
-        &prop);
-    if (FAILED(hRes)) goto quit;
-
-    hRes = lpMDB->SetReceiveFolder((LPTSTR)"IPM.Command", 0, prop->Value.bin.cb, (LPENTRYID)prop->Value.bin.lpb);
-    ///////////////////////////////////////////////////////////////////////
+    // Create a new message inside the outbox
     hRes = lpFolder->CreateMessage(NULL, 0, (LPMESSAGE*)&lpMessage);
     if (hRes != S_OK) goto quit;
-    /////////////////////////////////////////////////////////////////////
-    propIPC.dwAlignPad = 0;
-    propIPC.ulPropTag = PR_MESSAGE_CLASS;
-    propIPC.Value.lpszA = (LPSTR)"IPM.Command";
+    
+    // Change message class to IPM.Command so it will be saved in the hidden folder
+    prop.dwAlignPad = 0;
+    prop.ulPropTag = PR_MESSAGE_CLASS;
+    prop.Value.lpszA = (LPSTR)"IPM.Command";
 
     hRes = HrSetOneProp(
         lpMessage,
-        &propIPC);
-    if (FAILED(hRes)) goto quit;
-
-    hRes = HrGetOneProp(
-        lpMessage,
-        PR_MESSAGE_CLASS,
-        &prop);
-    if (FAILED(hRes)) goto quit; 
-    
-    hRes = HrGetOneProp(
-        lpFolder,
-        PR_DISPLAY_NAME_W,
         &prop);
     if (FAILED(hRes)) goto quit;
 
-    /////////////////////////////////////////////////////////////////////
-
+    // Set the message's subject, body and recipients
     hRes = BuildEmail(lpMAPISession, lpMDB, lpMessage, szSubject, szBody, lpRecipients, szSenderName);
     if (hRes != S_OK) goto quit;
     
+    // Send the message
     hRes = ((LPMESSAGE)lpMessage)->SubmitMessage(0);
     if (hRes != S_OK) goto quit;
 
@@ -263,20 +221,20 @@ STDMETHODIMP OpenDefaultMessageStore(LPMAPISESSION lpMAPISession, LPMDB* lpMDB, 
     hRes = HrQueryAllRows(
         pStoresTbl, //Table to query
         (LPSPropTagArray)&sptCols, //Which columns to get
-        &sres, //Restriction to use
-        NULL, //No sort order
-        0, //Max number of rows (0 means no limit)
-        &pRow); //Array to return
+        &sres,   //Restriction to use
+        NULL,    //No sort order
+        0,       //Max number of rows (0 means no limit)
+        &pRow);  //Array to return
     if (FAILED(hRes)) goto quit;
 
     //Open the first returned (default) message store
     hRes = lpMAPISession->OpenMsgStore(
-        NULL,//Window handle for dialogs
-        pRow->aRow[0].lpProps[EID].Value.bin.cb,//size and...
-        (LPENTRYID)pRow->aRow[0].lpProps[EID].Value.bin.lpb,//value of entry to open
-        NULL,//Use default interface (IMsgStore) to open store
-        MDB_WRITE | MDB_ONLINE ? bOnline : 0,//Flags
-        &lpTempMDB);//Pointer to place the store in
+        NULL,                                                //Window handle for dialogs
+        pRow->aRow[0].lpProps[EID].Value.bin.cb,             //size and...
+        (LPENTRYID)pRow->aRow[0].lpProps[EID].Value.bin.lpb, //value of entry to open
+        NULL,                                                //Use default interface (IMsgStore) to open store
+        MDB_WRITE | (MDB_ONLINE ? bOnline : 0),              //Flags
+        &lpTempMDB);                                         //Pointer to place the store in
     if (FAILED(hRes)) goto quit;
 
     //Assign the out parameter
@@ -299,7 +257,7 @@ quit:
     return hRes;
 }
 
-STDMETHODIMP OpenInbox(LPMDB lpMDB, LPMAPIFOLDER* lpInboxFolder)
+STDMETHODIMP OpenInbox(LPMDB lpMDB, LPMAPIFOLDER* lpInboxFolder, LPSTR lpMessageClass)
 {
     ULONG        cbInbox;
     LPENTRYID    lpbInbox;
@@ -382,7 +340,7 @@ ULONG InboxCallback(LPVOID lpvContext, ULONG cNotification, LPNOTIFICATION lpNot
 STDMETHODIMP RegisterNewMessage(LPMDB lpMDB, LPMAPIFOLDER lpFolder) {
     HRESULT hRes = S_OK;
     LPSPropValue prop;
-    CMAPIAdviseSink* pMapiNotifySink = new CMAPIAdviseSink();
+    //CMAPIAdviseSink* pMapiNotifySink = new CMAPIAdviseSink();
     IMAPIAdviseSink *lpAdviseSink = NULL;
     ULONG_PTR ulConnection;
 
@@ -404,8 +362,8 @@ STDMETHODIMP RegisterNewMessage(LPMDB lpMDB, LPMAPIFOLDER lpFolder) {
     if (FAILED(hRes)) goto quit;
 
     hRes = lpMDB->Advise(
-        0,//prop->Value.bin.cb,
-        0,//(LPENTRYID)prop->Value.bin.lpb,
+        prop->Value.bin.cb,
+        (LPENTRYID)prop->Value.bin.lpb,
         fnevNewMail,
         lpAdviseSink,
         &ulConnection
