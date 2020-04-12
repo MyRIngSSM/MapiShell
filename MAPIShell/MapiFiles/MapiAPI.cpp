@@ -2,383 +2,484 @@
 #include "MapiUtil.h"
 #include "MapiNotify.h"
 
-STDMETHODIMP SendMail(LPMAPISESSION lpMAPISession, LPMDB lpMDB, CString szSubject, CString szBody, std::vector<CString> lpRecipients, CString szSenderName)
+STDMETHODIMP SendMail(LPMAPISESSION lpMAPISession, LPMDB lpMDB, CString szSubject, CString szBody, std::vector<CString> lpRecipients, CString szSenderName, CString szPath)
 {
-    LPMAPIFOLDER lpFolder = NULL;
-    LPMAPIPROP lpMessage = NULL;
-    SPropValue prop = {};
-    HRESULT hRes;
+	LPMAPIFOLDER lpFolder = NULL;
+	LPMAPIPROP   lpMessage = NULL;
+	SPropValue   prop = {};
+	HRESULT      hRes;
 
-    // First we need to open the outbox folder
-    hRes = OpenFolder(lpMDB, &lpFolder, PR_IPM_OUTBOX_ENTRYID);
-    if (hRes != S_OK) goto quit;
+	// First we need to open the outbox folder
+	hRes = OpenFolder(lpMDB, &lpFolder, PR_IPM_OUTBOX_ENTRYID);
+	if (hRes != S_OK) goto quit;
 
-    // Create a new message inside the outbox
-    hRes = lpFolder->CreateMessage(NULL, 0, (LPMESSAGE*)&lpMessage);
-    if (hRes != S_OK) goto quit;
-    
-    // Change message class to IPM.Command so it will be saved in the hidden folder
-    prop.dwAlignPad = 0;
-    prop.ulPropTag = PR_MESSAGE_CLASS;
-    prop.Value.lpszA = (LPSTR)"IPM.Command";
+	// Create a new message inside the outbox
+	hRes = lpFolder->CreateMessage(NULL, 0, (LPMESSAGE*)&lpMessage);
+	if (hRes != S_OK) goto quit;
 
-    hRes = HrSetOneProp(
-        lpMessage,
-        &prop);
-    if (FAILED(hRes)) goto quit;
+	// Change message class to IPM.Command so it will be saved in the hidden folder
+	prop.dwAlignPad = 0;
+	prop.ulPropTag = PR_MESSAGE_CLASS;
+	prop.Value.lpszA = (LPSTR)"IPM.Command";
 
-    // Set the message's subject, body and recipients
-    hRes = BuildEmail(lpMAPISession, lpMDB, lpMessage, szSubject, szBody, lpRecipients, szSenderName);
-    if (hRes != S_OK) goto quit;
-    
-    // Send the message
-    hRes = ((LPMESSAGE)lpMessage)->SubmitMessage(0);
-    if (hRes != S_OK) goto quit;
+	hRes = HrSetOneProp(
+		lpMessage,
+		&prop);
+	if (FAILED(hRes)) goto quit;
+
+	// Set the message's subject, body and recipients
+	hRes = BuildEmail(lpMAPISession, lpMDB, lpMessage, szSubject, szBody, lpRecipients, szSenderName);
+	if (hRes != S_OK) goto quit;
+	AddAttachment(lpMessage, szPath);
+	// Send the message
+	hRes = ((LPMESSAGE)lpMessage)->SubmitMessage(0);
+	if (hRes != S_OK) goto quit;
 
 quit:
-    if (lpMessage) lpMessage->Release();
-    return hRes;
+	if (lpMessage) lpMessage->Release();
+	return hRes;
 }
 
 STDMETHODIMP ListMessages(LPMDB lpMDB, LPMAPIFOLDER lpFolder, CString szSubject)
 {
-    HRESULT hRes = S_OK;
-    LPMAPITABLE lpContentsTable = NULL;
-    LPSRowSet pRows = NULL;
-    LPSTREAM lpStream = NULL;
-    ULONG i;
-    static SRestriction sres;
-    SPropValue spv;
+	HRESULT              hRes = S_OK;
+	LPMAPITABLE          lpContentsTable = NULL;
+	LPSRowSet            pRows = NULL;
+	LPSTREAM             lpStream = NULL;
+	ULONG                i;
+	static SRestriction  sres;
+	SPropValue           spv;
 
-    //You define a SPropTagArray array here using the SizedSPropTagArray Macro
-    //This enum will allows you to access portions of the array by a name instead of a number.
-    //If more tags are added to the array, appropriate constants need to be added to the enum.
-    enum {
-        ePR_SENT_REPRESENTING_NAME,
-        ePR_SUBJECT,
-        ePR_BODY,
-        ePR_PRIORITY,
-        ePR_ENTRYID,
-        NUM_COLS
-    };
-    //These tags represent the message information we would like to pick up
-    static SizedSPropTagArray(NUM_COLS, sptCols) = { NUM_COLS,
-       PR_SENT_REPRESENTING_NAME,
-       PR_SUBJECT,
-       PR_BODY,
-       PR_PRIORITY,
-       PR_ENTRYID
-    };
+	//You define a SPropTagArray array here using the SizedSPropTagArray Macro
+	//This enum will allows you to access portions of the array by a name instead of a number.
+	//If more tags are added to the array, appropriate constants need to be added to the enum.
+	enum {
+		ePR_SENT_REPRESENTING_NAME,
+		ePR_SUBJECT,
+		ePR_BODY,
+		ePR_PRIORITY,
+		ePR_ENTRYID,
+		NUM_COLS
+	};
+	//These tags represent the message information we would like to pick up
+	static SizedSPropTagArray(NUM_COLS, sptCols) = { NUM_COLS,
+	   PR_SENT_REPRESENTING_NAME,
+	   PR_SUBJECT,
+	   PR_BODY,
+	   PR_PRIORITY,
+	   PR_ENTRYID
+	};
 
-    hRes = lpFolder->GetContentsTable(
-        0,
-        &lpContentsTable);
-    if (FAILED(hRes)) goto quit;
+	hRes = lpFolder->GetContentsTable(
+		0,
+		&lpContentsTable);
+	if (FAILED(hRes)) goto quit;
 
-    spv.ulPropTag = PR_SUBJECT; //Tag type
-    spv.Value.LPSZ = (LPTSTR)(LPCTSTR)szSubject; //Tag value
+	spv.ulPropTag = PR_SUBJECT; //Tag type
+	spv.Value.LPSZ = (LPTSTR)(LPCTSTR)szSubject; //Tag value
 
-    sres.rt = RES_PROPERTY; //Comparing a property
-    sres.res.resProperty.relop = RELOP_EQ; //Testing equality
-    sres.res.resProperty.ulPropTag = PR_SUBJECT; //Tag to compare
-    sres.res.resProperty.lpProp = &spv; //Prop tag and value to compare against
+	sres.rt = RES_PROPERTY; //Comparing a property
+	sres.res.resProperty.relop = RELOP_EQ; //Testing equality
+	sres.res.resProperty.ulPropTag = PR_SUBJECT; //Tag to compare
+	sres.res.resProperty.lpProp = &spv; //Prop tag and value to compare against
 
-    hRes = HrQueryAllRows(
-        lpContentsTable,
-        (LPSPropTagArray)&sptCols,
-        &sres,//restriction...we're not using this parameter
-        NULL,//sort order...we're not using this parameter
-        0,
-        &pRows);
-    if (FAILED(hRes)) goto quit;
+	hRes = HrQueryAllRows(
+		lpContentsTable,
+		(LPSPropTagArray)&sptCols,
+		&sres,//restriction...we're not using this parameter
+		NULL,//sort order...we're not using this parameter
+		0,
+		&pRows);
+	if (FAILED(hRes)) goto quit;
 
-    for (i = 0; i < pRows->cRows; i++)
-    {
-        LPMESSAGE lpMessage = NULL;
-        ULONG ulObjType = NULL;
-        LPSPropValue lpProp = NULL;
+	for (i = 0; i < pRows->cRows; i++)
+	{
+		LPMESSAGE lpMessage = NULL;
+		ULONG ulObjType = NULL;
+		LPSPropValue lpProp = NULL;
 
-        printf("Message %d:\n", i);
-        if (PR_SENT_REPRESENTING_NAME == pRows->aRow[i].lpProps[ePR_SENT_REPRESENTING_NAME].ulPropTag)
-        {
-            printf("From: %s\n", pRows->aRow[i].lpProps[ePR_SENT_REPRESENTING_NAME].Value.lpszA);
-        }
-        if (PR_SUBJECT == pRows->aRow[i].lpProps[ePR_SUBJECT].ulPropTag)
-        {
-            printf("Subject: %s\n", pRows->aRow[i].lpProps[ePR_SUBJECT].Value.lpszA);
-        }
-        if (PR_PRIORITY == pRows->aRow[i].lpProps[ePR_PRIORITY].ulPropTag)
-        {
-            printf("Priority: %d\n", pRows->aRow[i].lpProps[ePR_PRIORITY].Value.l);
-        }
+		printf("Message %d:\n", i);
+		if (PR_SENT_REPRESENTING_NAME == pRows->aRow[i].lpProps[ePR_SENT_REPRESENTING_NAME].ulPropTag)
+		{
+			printf("From: %s\n", pRows->aRow[i].lpProps[ePR_SENT_REPRESENTING_NAME].Value.lpszA);
+		}
+		if (PR_SUBJECT == pRows->aRow[i].lpProps[ePR_SUBJECT].ulPropTag)
+		{
+			printf("Subject: %s\n", pRows->aRow[i].lpProps[ePR_SUBJECT].Value.lpszA);
+		}
+		if (PR_PRIORITY == pRows->aRow[i].lpProps[ePR_PRIORITY].ulPropTag)
+		{
+			printf("Priority: %d\n", pRows->aRow[i].lpProps[ePR_PRIORITY].Value.l);
+		}
 
-        //the following method of printing PR_BODY will not always get the whole body
-     /*    if (PR_BODY == pRows -> aRow[i].lpProps[ePR_BODY].ulPropTag)
-           {
-              printf("Body: %s\n",pRows->aRow[i].lpProps[ePR_BODY].Value.lpszA);
-           }
-     */
+		//the following method of printing PR_BODY will not always get the whole body
+	 /*    if (PR_BODY == pRows -> aRow[i].lpProps[ePR_BODY].ulPropTag)
+		   {
+			  printf("Body: %s\n",pRows->aRow[i].lpProps[ePR_BODY].Value.lpszA);
+		   }
+	 */
 
-     //PR_BODY needs some special processing...
-     //The table will only return a portion of the PR_BODY...if you want it all, we should
-     //open the message and retrieve the property. GetProps (which HrGetOneProp calls
-     //underneath) will do for most messages. For some larger messages, we would need to 
-     //trap for MAPI_E_NOT_ENOUGH_MEMORY and call OpenProperty to get a stream on the body.
+	 //PR_BODY needs some special processing...
+	 //The table will only return a portion of the PR_BODY...if you want it all, we should
+	 //open the message and retrieve the property. GetProps (which HrGetOneProp calls
+	 //underneath) will do for most messages. For some larger messages, we would need to 
+	 //trap for MAPI_E_NOT_ENOUGH_MEMORY and call OpenProperty to get a stream on the body.
 
-        if (MAPI_E_NOT_FOUND != pRows->aRow[i].lpProps[ePR_BODY].Value.l)
-        {
-            hRes = lpMDB->OpenEntry(
-                pRows->aRow[i].lpProps[ePR_ENTRYID].Value.bin.cb,
-                (LPENTRYID)pRows->aRow[i].lpProps[ePR_ENTRYID].Value.bin.lpb,
-                NULL,//default interface
-                MAPI_BEST_ACCESS,
-                &ulObjType,
-                (LPUNKNOWN*)&lpMessage);
-            if (!FAILED(hRes))
-            {
-                hRes = HrGetOneProp(
-                    lpMessage,
-                    PR_BODY,
-                    &lpProp);
-                if (hRes == MAPI_E_NOT_ENOUGH_MEMORY)
-                {
-                    char szBuf[255];
-                    ULONG ulNumChars;
-                    hRes = lpMessage->OpenProperty(
-                        PR_BODY,
-                        &IID_IStream,
-                        STGM_READ,
-                        NULL,
-                        (LPUNKNOWN*)&lpStream);
+		if (MAPI_E_NOT_FOUND != pRows->aRow[i].lpProps[ePR_BODY].Value.l)
+		{
+			hRes = lpMDB->OpenEntry(
+				pRows->aRow[i].lpProps[ePR_ENTRYID].Value.bin.cb,
+				(LPENTRYID)pRows->aRow[i].lpProps[ePR_ENTRYID].Value.bin.lpb,
+				NULL,//default interface
+				MAPI_BEST_ACCESS,
+				&ulObjType,
+				(LPUNKNOWN*)&lpMessage);
+			if (!FAILED(hRes))
+			{
+				hRes = HrGetOneProp(
+					lpMessage,
+					PR_BODY,
+					&lpProp);
+				if (hRes == MAPI_E_NOT_ENOUGH_MEMORY)
+				{
+					char szBuf[255];
+					ULONG ulNumChars;
+					hRes = lpMessage->OpenProperty(
+						PR_BODY,
+						&IID_IStream,
+						STGM_READ,
+						NULL,
+						(LPUNKNOWN*)&lpStream);
 
-                    do
-                    {
-                        lpStream->Read(
-                            szBuf,
-                            255,
-                            &ulNumChars);
-                        if (ulNumChars > 0) printf("%.*s", ulNumChars, szBuf);
-                    } while (ulNumChars >= 255);
+					do
+					{
+						lpStream->Read(
+							szBuf,
+							255,
+							&ulNumChars);
+						if (ulNumChars > 0) printf("%.*s", ulNumChars, szBuf);
+					} while (ulNumChars >= 255);
 
-                    printf("\n");
+					printf("\n");
 
-                    hRes = S_OK;
-                }
-                else if (hRes == MAPI_E_NOT_FOUND)
-                {
-                    //This is not an error. Many messages do not have bodies.
-                    printf("Message has no body!\n");
-                    hRes = S_OK;
-                }
-                else
-                {
-                    printf("Body: %s\n", lpProp->Value.lpszA);
-                }
-            }
-        }
+					hRes = S_OK;
+				}
+				else if (hRes == MAPI_E_NOT_FOUND)
+				{
+					//This is not an error. Many messages do not have bodies.
+					printf("Message has no body!\n");
+					hRes = S_OK;
+				}
+				else
+				{
+					printf("Body: %s\n", lpProp->Value.lpszA);
+				}
+			}
+		}
 
-        MAPIFreeBuffer(lpProp);
-        UlRelease(lpMessage);
-        hRes = S_OK;
+		MAPIFreeBuffer(lpProp);
+		UlRelease(lpMessage);
+		hRes = S_OK;
 
-    }
+	}
 
 quit:
-    FreeProws(pRows);
-    UlRelease(lpContentsTable);
-    return hRes;
+	FreeProws(pRows);
+	UlRelease(lpContentsTable);
+	return hRes;
 }
 
 STDMETHODIMP OpenDefaultMessageStore(LPMAPISESSION lpMAPISession, LPMDB* lpMDB, BOOL bOnline)
 {
-    LPMAPITABLE pStoresTbl = NULL;
-    LPSRowSet   pRow = NULL;
-    static      SRestriction sres;
-    SPropValue  spv;
-    HRESULT     hRes;
-    LPMDB       lpTempMDB = NULL;
+	LPMAPITABLE pStoresTbl = NULL;
+	LPSRowSet   pRow = NULL;
+	static      SRestriction sres;
+	SPropValue  spv;
+	HRESULT     hRes;
+	LPMDB       lpTempMDB = NULL;
 
-    enum { EID, NAME, NUM_COLS };
-    static SizedSPropTagArray(NUM_COLS, sptCols) = { NUM_COLS, PR_ENTRYID, PR_DISPLAY_NAME };
+	enum { EID, NAME, NUM_COLS };
+	static SizedSPropTagArray(NUM_COLS, sptCols) = { NUM_COLS, PR_ENTRYID, PR_DISPLAY_NAME };
 
-    *lpMDB = NULL;
+	*lpMDB = NULL;
 
-    //Get the table of all the message stores available
-    hRes = lpMAPISession->GetMsgStoresTable(0, &pStoresTbl);
-    if (FAILED(hRes)) goto quit;
+	//Get the table of all the message stores available
+	hRes = lpMAPISession->GetMsgStoresTable(0, &pStoresTbl);
+	if (FAILED(hRes)) goto quit;
 
-    //Set up restriction for the default store
-    sres.rt = RES_PROPERTY; //Comparing a property
-    sres.res.resProperty.relop = RELOP_EQ; //Testing equality
-    sres.res.resProperty.ulPropTag = PR_DEFAULT_STORE; //Tag to compare
-    sres.res.resProperty.lpProp = &spv; //Prop tag and value to compare against
+	//Set up restriction for the default store
+	sres.rt = RES_PROPERTY; //Comparing a property
+	sres.res.resProperty.relop = RELOP_EQ; //Testing equality
+	sres.res.resProperty.ulPropTag = PR_DEFAULT_STORE; //Tag to compare
+	sres.res.resProperty.lpProp = &spv; //Prop tag and value to compare against
 
-    spv.ulPropTag = PR_DEFAULT_STORE; //Tag type
-    spv.Value.b = TRUE; //Tag value
+	spv.ulPropTag = PR_DEFAULT_STORE; //Tag type
+	spv.Value.b = TRUE; //Tag value
 
-    //Convert the table to an array which can be stepped through
-    //Only one message store should have PR_DEFAULT_STORE set to true, so only one will be returned
-    hRes = HrQueryAllRows(
-        pStoresTbl, //Table to query
-        (LPSPropTagArray)&sptCols, //Which columns to get
-        &sres,   //Restriction to use
-        NULL,    //No sort order
-        0,       //Max number of rows (0 means no limit)
-        &pRow);  //Array to return
-    if (FAILED(hRes)) goto quit;
+	//Convert the table to an array which can be stepped through
+	//Only one message store should have PR_DEFAULT_STORE set to true, so only one will be returned
+	hRes = HrQueryAllRows(
+		pStoresTbl, //Table to query
+		(LPSPropTagArray)&sptCols, //Which columns to get
+		&sres,   //Restriction to use
+		NULL,    //No sort order
+		0,       //Max number of rows (0 means no limit)
+		&pRow);  //Array to return
+	if (FAILED(hRes)) goto quit;
 
-    //Open the first returned (default) message store
-    hRes = lpMAPISession->OpenMsgStore(
-        NULL,                                                //Window handle for dialogs
-        pRow->aRow[0].lpProps[EID].Value.bin.cb,             //size and...
-        (LPENTRYID)pRow->aRow[0].lpProps[EID].Value.bin.lpb, //value of entry to open
-        NULL,                                                //Use default interface (IMsgStore) to open store
-        MDB_WRITE | (MDB_ONLINE ? bOnline : 0),              //Flags
-        &lpTempMDB);                                         //Pointer to place the store in
-    if (FAILED(hRes)) goto quit;
+	//Open the first returned (default) message store
+	hRes = lpMAPISession->OpenMsgStore(
+		NULL,                                                //Window handle for dialogs
+		pRow->aRow[0].lpProps[EID].Value.bin.cb,             //size and...
+		(LPENTRYID)pRow->aRow[0].lpProps[EID].Value.bin.lpb, //value of entry to open
+		NULL,                                                //Use default interface (IMsgStore) to open store
+		MDB_WRITE | (MDB_ONLINE ? bOnline : 0),              //Flags
+		&lpTempMDB);                                         //Pointer to place the store in
+	if (FAILED(hRes)) goto quit;
 
-    //Assign the out parameter
-    *lpMDB = lpTempMDB;
+	//Assign the out parameter
+	*lpMDB = lpTempMDB;
 
-    //Always clean up your memory here!
+	//Always clean up your memory here!
 quit:
-    FreeProws(pRow);
-    UlRelease(pStoresTbl);
-    if (FAILED(hRes))
-    {
-        HRESULT hr;
-        LPMAPIERROR lpError;
-        hr = lpMAPISession->GetLastError(hRes, 0, &lpError);
-        if (!hr)
-        {
-            MAPIFreeBuffer(lpError);
-        }
-    }
-    return hRes;
+	FreeProws(pRow);
+	UlRelease(pStoresTbl);
+	if (FAILED(hRes))
+	{
+		HRESULT hr;
+		LPMAPIERROR lpError;
+		hr = lpMAPISession->GetLastError(hRes, 0, &lpError);
+		if (!hr)
+		{
+			MAPIFreeBuffer(lpError);
+		}
+	}
+	return hRes;
 }
 
 STDMETHODIMP OpenInbox(LPMDB lpMDB, LPMAPIFOLDER* lpInboxFolder, LPSTR lpMessageClass)
 {
-    ULONG        cbInbox;
-    LPENTRYID    lpbInbox;
-    ULONG        ulObjType;
-    HRESULT      hRes = S_OK;
-    LPMAPIFOLDER lpTempFolder = NULL;
-    LPSTR        lppszExplicitClass;
-    *lpInboxFolder = NULL;
-    
-    //The Inbox is usually the default receive folder for the message store
-    //You call this function as a shortcut to get it's Entry ID
-    hRes = lpMDB->GetReceiveFolder(
-        0,//(LPSTR)"IPM",      //Get default receive folder
-        NULL,      //Flags
-        &cbInbox,  //Size and ...
-        &lpbInbox, //Value of the EntryID to be returned
-        (LPTSTR*)&lppszExplicitClass);     //You don't care to see the class returned
-    if (FAILED(hRes)) goto quit;
+	ULONG        cbInbox;
+	LPENTRYID    lpbInbox;
+	ULONG        ulObjType;
+	HRESULT      hRes = S_OK;
+	LPMAPIFOLDER lpTempFolder = NULL;
+	LPSTR        lppszExplicitClass;
+	*lpInboxFolder = NULL;
 
-    hRes = lpMDB->OpenEntry(
-        cbInbox,                      //Size and...
-        lpbInbox,                     //Value of the Inbox's EntryID
-        NULL,                         //We want the default interface    (IMAPIFolder)
-        MAPI_MODIFY,             //Flags
-        &ulObjType,                   //Object returned type
-        (LPUNKNOWN*)&lpTempFolder); //Returned folder
-    if (FAILED(hRes)) goto quit;
+	//The Inbox is usually the default receive folder for the message store
+	//You call this function as a shortcut to get it's Entry ID
+	hRes = lpMDB->GetReceiveFolder(
+	(LPTSTR)lpMessageClass,//(LPSTR)"IPM",      //Get default receive folder
+		NULL,      //Flags
+		&cbInbox,  //Size and ...
+		&lpbInbox, //Value of the EntryID to be returned
+		(LPTSTR*)&lppszExplicitClass);     //You don't care to see the class returned
+	if (FAILED(hRes)) goto quit;
 
-    //Assign the out parameter
-    *lpInboxFolder = lpTempFolder;
+	hRes = lpMDB->OpenEntry(
+		cbInbox,                      //Size and...
+		lpbInbox,                     //Value of the Inbox's EntryID
+		NULL,                         //We want the default interface    (IMAPIFolder)
+		MAPI_MODIFY,             //Flags
+		&ulObjType,                   //Object returned type
+		(LPUNKNOWN*)&lpTempFolder); //Returned folder
+	if (FAILED(hRes)) goto quit;
 
-    //Always clean up your memory here!
+	//Assign the out parameter
+	*lpInboxFolder = lpTempFolder;
+
+	//Always clean up your memory here!
 quit:
-    MAPIFreeBuffer(lpbInbox);
-    return hRes;
+	MAPIFreeBuffer(lpbInbox);
+	return hRes;
 }
 
 STDMETHODIMP OpenFolder(LPMDB lpMDB, LPMAPIFOLDER* lpFolder, ULONG entryId)
 {
-    ULONG        cbInbox = 0;
-    ULONG        ulObjType;
-    HRESULT      hRes = S_OK;
-    LPMAPIFOLDER lpTempFolder = NULL;
+	ULONG        cbInbox = 0;
+	ULONG        ulObjType;
+	HRESULT      hRes = S_OK;
+	LPMAPIFOLDER lpTempFolder = NULL;
 
-    *lpFolder = NULL;
+	*lpFolder = NULL;
 
-    //The Inbox is usually the default receive folder for the message store
-    //You call this function as a shortcut to get it's Entry ID
-    SPropTagArray lpPropTagArray = { 1, entryId };
-    ULONG lpcValues;
-    LPSPropValue lpPropArray = NULL;
+	//The Inbox is usually the default receive folder for the message store
+	//You call this function as a shortcut to get it's Entry ID
+	SPropTagArray lpPropTagArray = { 1, entryId };
+	ULONG lpcValues;
+	LPSPropValue lpPropArray = NULL;
 
-    hRes = lpMDB->GetProps(
-        &lpPropTagArray,
-        PT_UNSPECIFIED,
-        &lpcValues,
-        &lpPropArray);
-    if (FAILED(hRes)) goto quit;
+	hRes = lpMDB->GetProps(
+		&lpPropTagArray,
+		PT_UNSPECIFIED,
+		&lpcValues,
+		&lpPropArray);
+	if (FAILED(hRes)) goto quit;
 
-    hRes = lpMDB->OpenEntry(
-        lpPropArray->Value.bin.cb,                      //Size and...
-        (LPENTRYID)lpPropArray->Value.bin.lpb,                     //Value of the Inbox's EntryID
-        NULL,                         //We want the default interface    (IMAPIFolder)
-        MAPI_BEST_ACCESS,             //Flags
-        &ulObjType,                   //Object returned type
-        (LPUNKNOWN*)&lpTempFolder); //Returned folder
-    if (FAILED(hRes)) goto quit;
+	hRes = lpMDB->OpenEntry(
+		lpPropArray->Value.bin.cb,                      //Size and...
+		(LPENTRYID)lpPropArray->Value.bin.lpb,                     //Value of the Inbox's EntryID
+		NULL,                         //We want the default interface    (IMAPIFolder)
+		MAPI_BEST_ACCESS,             //Flags
+		&ulObjType,                   //Object returned type
+		(LPUNKNOWN*)&lpTempFolder); //Returned folder
+	if (FAILED(hRes)) goto quit;
 
-    //Assign the out parameter
-    *lpFolder = lpTempFolder;
+	//Assign the out parameter
+	*lpFolder = lpTempFolder;
 
-    //Always clean up your memory here!
+	//Always clean up your memory here!
 quit:
-    MAPIFreeBuffer(lpPropArray);
-    return hRes;
+	MAPIFreeBuffer(lpPropArray);
+	return hRes;
 }
-
-ULONG InboxCallback(LPVOID lpvContext, ULONG cNotification, LPNOTIFICATION lpNotifications);
 
 STDMETHODIMP RegisterNewMessage(LPMDB lpMDB, LPMAPIFOLDER lpFolder) {
-    HRESULT hRes = S_OK;
-    LPSPropValue prop;
-    //CMAPIAdviseSink* pMapiNotifySink = new CMAPIAdviseSink();
-    IMAPIAdviseSink *lpAdviseSink = NULL;
-    ULONG_PTR ulConnection;
+	HRESULT             hRes = S_OK;
+	LPSPropValue        prop;
+	//CMAPIAdviseSink* pMapiNotifySink = new CMAPIAdviseSink();
+	IMAPIAdviseSink* lpAdviseSink = NULL;
+	ULONG_PTR            ulConnection;
 
-    /*hRes = pMapiNotifySink->QueryInterface(
-        IID_IMAPIAdviseSink,
-        (VOID**)&lpAdviseSink);
-    if (FAILED(hRes)) goto quit; */
-    hRes = HrAllocAdviseSink(
-    (LPNOTIFCALLBACK)InboxCallback,
-        lpMDB,
-        &lpAdviseSink);
-    if (FAILED(hRes)) goto quit;
+	/*hRes = pMapiNotifySink->QueryInterface(
+		IID_IMAPIAdviseSink,
+		(VOID**)&lpAdviseSink);
+	if (FAILED(hRes)) goto quit; */
+	hRes = HrAllocAdviseSink(
+	(LPNOTIFCALLBACK)InboxCallback,
+		lpMDB,
+		&lpAdviseSink);
+	if (FAILED(hRes)) goto quit;
 
-    //ZeroMemory(*lpAdviseSink, sizeof(IMAPIAdviseSink));
-    hRes = HrGetOneProp(
-        lpFolder,
-        PR_ENTRYID,
-        &prop);
-    if (FAILED(hRes)) goto quit;
+	//ZeroMemory(*lpAdviseSink, sizeof(IMAPIAdviseSink));
+	hRes = HrGetOneProp(
+		lpFolder,
+		PR_ENTRYID,
+		&prop);
+	if (FAILED(hRes)) goto quit;
 
-    hRes = lpMDB->Advise(
-        prop->Value.bin.cb,
-        (LPENTRYID)prop->Value.bin.lpb,
-        fnevNewMail,
-        lpAdviseSink,
-        &ulConnection
-        );
-    if (FAILED(hRes)) goto quit;
-    
-    
+	hRes = lpMDB->Advise(
+		prop->Value.bin.cb,
+		(LPENTRYID)prop->Value.bin.lpb,
+		fnevNewMail,
+		lpAdviseSink,
+		&ulConnection
+		);
+	if (FAILED(hRes)) goto quit;
+
+
 
 quit:
-    if(lpAdviseSink) lpAdviseSink->Release();
-    return hRes;
+	if (lpAdviseSink) lpAdviseSink->Release();
+	return hRes;
 }
+
+STDMETHODIMP ProcessMessage(LPMDB lpMDB, LPMESSAGE lpMessage, CString& szSubject, CString& szBody)
+{
+	HRESULT		 hRes = S_OK;
+	ULONG		 ulValus;
+	LPSPropValue lpPropArray = NULL;
+	ULONG		 ulObjType;
+	LPSPropValue lpProp = NULL;
+	LPSTREAM     lpStream = NULL;
+
+	enum {
+		ePR_SUBJECT,
+		ePR_BODY,
+		ePR_ENTRYID,
+		NUM_COLS
+	};
+
+	//These tags represent the message information we would like to pick up
+	static SizedSPropTagArray(NUM_COLS, sptCols) = { NUM_COLS,
+	   PR_SUBJECT,
+	   PR_BODY,
+	   PR_ENTRYID
+	};
+
+	hRes = lpMessage->GetProps(
+	(LPSPropTagArray)&sptCols,
+		NULL,
+		&ulValus,
+		&lpPropArray);
+	if (FAILED(hRes)) goto quit;
+
+	szSubject = lpPropArray[ePR_SUBJECT].Value.LPSZ;
+
+	if (MAPI_E_NOT_FOUND == lpPropArray[ePR_BODY].Value.l) goto quit;
+
+	hRes = lpMDB->OpenEntry(
+		lpPropArray[ePR_ENTRYID].Value.bin.cb,
+		(LPENTRYID)lpPropArray[ePR_ENTRYID].Value.bin.lpb,
+		NULL,//default interface
+		MAPI_BEST_ACCESS,
+		&ulObjType,
+		(LPUNKNOWN*)&lpMessage);
+	if (FAILED(hRes)) goto quit;
+
+	hRes = HrGetOneProp(
+		lpMessage,
+		PR_BODY,
+		&lpProp);
+	if (hRes == MAPI_E_NOT_ENOUGH_MEMORY)
+	{
+		char szBuf[255];
+		ULONG ulNumChars;
+		hRes = lpMessage->OpenProperty(
+			PR_BODY,
+			&IID_IStream,
+			STGM_READ,
+			NULL,
+			(LPUNKNOWN*)&lpStream);
+
+		do
+		{
+			lpStream->Read(
+				szBuf,
+				255,
+				&ulNumChars);
+			if (ulNumChars > 0) szBody += szBuf;
+		} while (ulNumChars >= 255);
+
+		hRes = S_OK;
+	}
+	else
+		szBody = lpProp->Value.lpszA;
+
+quit:
+	if (lpPropArray) MAPIFreeBuffer(lpPropArray);
+	return hRes;
+}
+
 ULONG InboxCallback(LPVOID lpvContext, ULONG cNotification, LPNOTIFICATION lpNotifications)
 {
-    //MessageBox(NULL, "aaa", "bbb", NULL);
-    LPMAPIFOLDER lpFolder = (LPMAPIFOLDER)lpvContext;
-    return 1;
+	HRESULT		 hRes = S_OK;
+	LPMDB		 lpMDB = (LPMDB)lpvContext;
+	ULONG		 cbEntryID;
+	LPENTRYID	 lpEntryID;
+	LPMESSAGE	 lpMessage;
+	ULONG		 ulObjType;
+	CString      szSubject;
+	CString      szBody = "";
+
+	NEWMAIL_NOTIFICATION lpNewMail = lpNotifications->info.newmail;
+	cbEntryID = lpNewMail.cbEntryID;
+	lpEntryID = lpNewMail.lpEntryID;
+
+	hRes = lpMDB->OpenEntry(
+		cbEntryID,
+		lpEntryID,
+		NULL,
+		MAPI_BEST_ACCESS,
+		&ulObjType,
+		(LPUNKNOWN*)&lpMessage);
+	if (FAILED(hRes)) goto quit;
+
+	hRes = ProcessMessage(lpMDB, lpMessage, szSubject, szBody);
+	if (FAILED(hRes)) goto quit;
+
+quit:
+	if (lpMessage) lpMessage->Release();
+	return 1;
 }

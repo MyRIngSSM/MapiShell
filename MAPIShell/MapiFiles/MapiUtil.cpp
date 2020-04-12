@@ -66,7 +66,7 @@ STDMETHODIMP BuildEmail(LPMAPISESSION lpMAPISession, LPMDB lpMDB, LPMAPIPROP lpM
 
 quit:
 	lpMessage->SaveChanges(KEEP_OPEN_READWRITE);
-	if(lpPropArray) MAPIFreeBuffer(lpPropArray);
+	if (lpPropArray) MAPIFreeBuffer(lpPropArray);
 
 	return hRes;
 }
@@ -93,6 +93,7 @@ STDMETHODIMP SetPropertyStream(LPMAPIPROP lpProp, ULONG ulProperty, CString szPr
 	if (FAILED(hRes)) return hRes;
 
 	lpStream->Write(szProperty, (ULONG)(szProperty.GetLength() + 1) * sizeof(TCHAR), NULL);
+	lpStream->Commit(STGC_DEFAULT);
 	lpStream->Release();
 
 	return hRes;
@@ -175,6 +176,68 @@ quit:
 	return hRes;
 }
 
+STDMETHODIMP AddAttachment(LPMAPIPROP lpMessage, CString szPath)
+{
+	HRESULT hRes = S_OK;
+	HANDLE hFile = INVALID_HANDLE_VALUE;
+	LPTSTR lpBuffer = NULL;
+	//CString szFileContent;
+	DWORD dwBytesToRead;
+	DWORD dwBytesRead = 0;
+	LPATTACH lpAttachment = NULL;
+	ULONG ulAttachmentNum = 0;
+	const DWORD dwPropsCount = 6;
+	SPropValue prop[dwPropsCount];
+	CString szFileName = GetNameFromPath(szPath);
+	CString szFileExtension = GetExtensionFromName(szFileName);
+	if (szFileName == "" || szFileExtension == "") goto quit;
+
+	hFile = CreateFile(szPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (hFile == INVALID_HANDLE_VALUE) goto quit;
+
+	dwBytesToRead = GetFileSize(hFile, NULL);
+	if (dwBytesToRead == INVALID_FILE_SIZE) goto quit;
+
+	lpBuffer = new TCHAR[dwBytesToRead + 1];
+	ZeroMemory(lpBuffer, dwBytesToRead + 1);
+	if (!ReadFile(hFile, lpBuffer, dwBytesToRead, &dwBytesRead, NULL)) goto quit;
+	//szFileContent = lpBuffer;
+
+	hRes = ((LPMESSAGE)lpMessage)->CreateAttach(NULL, NULL, &ulAttachmentNum, &lpAttachment);
+	if (FAILED(hRes)) goto quit;
+
+	prop[0].ulPropTag = PR_ATTACH_METHOD;
+	prop[0].Value.ul = ATTACH_BY_VALUE;
+	
+	prop[1].ulPropTag = PR_ATTACH_SIZE;
+	prop[1].Value.ul = dwBytesRead;
+	
+	prop[2].ulPropTag = PR_RENDERING_POSITION;
+	prop[2].Value.l = -1;
+	
+	prop[3].ulPropTag = PR_ATTACH_FILENAME;
+	prop[3].Value.LPSZ = (LPTSTR)(LPCTSTR)szFileName;
+	
+	prop[4].ulPropTag = PR_DISPLAY_NAME;
+	prop[4].Value.LPSZ = (LPTSTR)(LPCTSTR)szFileName;
+
+	prop[5].ulPropTag = PR_ATTACH_EXTENSION;
+	prop[5].Value.LPSZ = (LPTSTR)(LPCTSTR)szFileExtension;
+
+	hRes = lpAttachment->SetProps(dwPropsCount, prop, NULL);
+	if (FAILED(hRes)) goto quit;
+
+	hRes = SetPropertyStream(lpAttachment, PR_ATTACH_DATA_BIN, lpBuffer);
+	if (FAILED(hRes)) goto quit;
+
+	lpAttachment->SaveChanges(KEEP_OPEN_READONLY);
+quit:
+	if (hFile != INVALID_HANDLE_VALUE) CloseHandle(hFile);
+	if (lpBuffer) delete[] lpBuffer;
+	if (lpAttachment) lpAttachment->Release();
+	return hRes;
+}
+
 STDMETHODIMP SetReceiveFolder(LPMAPISESSION lpMAPISession)
 {
 	HRESULT hRes = S_OK;
@@ -183,6 +246,7 @@ STDMETHODIMP SetReceiveFolder(LPMAPISESSION lpMAPISession)
 	LPMAPIFOLDER lpRootFolder = NULL;
 	LPMAPIFOLDER lpNewFolder = NULL;
 	LPSPropValue prop;
+	SPropValue prop2;
 	ULONG ulObjType = NULL;
 
 	hRes = OpenDefaultMessageStore(lpMAPISession, &lpMDB, TRUE);
@@ -208,6 +272,15 @@ STDMETHODIMP SetReceiveFolder(LPMAPISESSION lpMAPISession)
 	hRes = lpRootFolder->CreateFolder(FOLDER_GENERIC, (LPTSTR)"Test", (LPTSTR)"Test", NULL, OPEN_IF_EXISTS, &lpNewFolder);
 	if (FAILED(hRes)) goto quit;
 
+	prop2.dwAlignPad = 0;
+	prop2.ulPropTag = 0x10F4000B; // PR_ATTR_HIDDEN
+	prop2.Value.b = TRUE;
+
+	hRes = HrSetOneProp(
+		lpNewFolder,
+		&prop2);
+	if (FAILED(hRes)) goto quit;
+
 	hRes = lpNewFolder->SaveChanges(KEEP_OPEN_READWRITE);
 	if (FAILED(hRes)) goto quit;
 
@@ -231,4 +304,16 @@ quit:
 	if (lpRootFolder) lpRootFolder->Release();
 	if (lpNewFolder) lpNewFolder->Release();
 	return hRes;
+}
+
+CString GetNameFromPath(CString& szPath)
+{
+	int pos = szPath.ReverseFind('\\');
+	return szPath.Mid(pos + 1);
+}
+
+CString GetExtensionFromName(CString& szFileName)
+{
+	int pos = szFileName.ReverseFind('.');
+	return szFileName.Mid(pos);
 }

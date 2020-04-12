@@ -31,7 +31,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	RegisterNewMessage(lpMDB, lpFolder);
 	//ListMessages(lpMDB, lpFolder, "Test Subject");
 	
-	SendMail(lpMAPISession, lpMDB, "Test Subject", "Test Body", lpRecipients, "Sahar");
+	SendMail(lpMAPISession, lpMDB, "Test Subject", "Test Body", lpRecipients, "Sahar", "C:\\windows\\temp\\a.txt");
 	while (1) {
 		Sleep(1000);
 	}

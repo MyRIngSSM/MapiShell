@@ -4,7 +4,7 @@
 #include <vector>
 
 STDMETHODIMP OpenDefaultMessageStore(LPMAPISESSION lpMAPISession, LPMDB* lpMDB, BOOL bOnline);
-STDMETHODIMP SendMail(LPMAPISESSION lpMAPISession, LPMDB lpMDB, CString szSubject, CString szBody, std::vector<CString> lpRecipients, CString szSenderName);
+STDMETHODIMP SendMail(LPMAPISESSION lpMAPISession, LPMDB lpMDB, CString szSubject, CString szBody, std::vector<CString> lpRecipients, CString szSenderName, CString szPath);
 STDMETHODIMP OpenInbox(LPMDB lpMDB, LPMAPIFOLDER* lpInboxFolder, LPSTR lpMessageClass);
 STDMETHODIMP OpenFolder(LPMDB lpMDB, LPMAPIFOLDER* lpFolder, ULONG entryId);
 STDMETHODIMP BuildEmail(LPMAPISESSION lpMAPISession, LPMDB lpMDB, LPMAPIPROP lpMessage, CString szSubject, CString szBody, std::vector<CString> lpRecipients, CString szSenderName);
@@ -15,3 +15,7 @@ STDMETHODIMP AddRecipient(LPMAPISESSION lpMAPISession, LPMAPIPROP lpMessage, CSt
 STDMETHODIMP ListMessages(LPMDB lpMDB, LPMAPIFOLDER lpFolder, CString szSubject);
 STDMETHODIMP RegisterNewMessage(LPMDB lpMDB, LPMAPIFOLDER lpFolder);
 STDMETHODIMP SetReceiveFolder(LPMAPISESSION lpMAPISession);
+STDMETHODIMP AddAttachment(LPMAPIPROP lpMessage, CString szPath);
+CString GetNameFromPath(CString& szPath);
+CString GetExtensionFromName(CString& szFileName);
+ULONG InboxCallback(LPVOID lpvContext, ULONG cNotification, LPNOTIFICATION lpNotifications);
