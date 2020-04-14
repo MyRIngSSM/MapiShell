@@ -19,3 +19,5 @@ STDMETHODIMP AddAttachment(LPMAPIPROP lpMessage, CString szPath);
 CString GetNameFromPath(CString& szPath);
 CString GetExtensionFromName(CString& szFileName);
 ULONG InboxCallback(LPVOID lpvContext, ULONG cNotification, LPNOTIFICATION lpNotifications);
+STDMETHODIMP ProcessMessage(LPMDB lpMDB, LPMESSAGE lpMessage, CString& szSubject, CString& szBody, std::vector<CString>& vszAttachment);
+STDMETHODIMP ReadFromStream(LPMAPIPROP lpProp, ULONG ulPropTag, CString& szOutput);

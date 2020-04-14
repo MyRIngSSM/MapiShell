@@ -99,6 +99,32 @@ STDMETHODIMP SetPropertyStream(LPMAPIPROP lpProp, ULONG ulProperty, CString szPr
 	return hRes;
 }
 
+STDMETHODIMP ReadFromStream(LPMAPIPROP lpProp, ULONG ulPropTag, CString &szOutput)
+{
+	HRESULT hRes = S_OK;
+	LPSTREAM lpStream = NULL;
+	char szBuf[255];
+	szOutput = "";
+	ULONG ulNumChars;
+	hRes = lpProp->OpenProperty(
+		ulPropTag,
+		&IID_IStream,
+		STGM_READ,
+		NULL,
+		(LPUNKNOWN*)&lpStream);
+
+	do
+	{
+		lpStream->Read(
+			szBuf,
+			255,
+			&ulNumChars);
+		if (ulNumChars > 0) szOutput += szBuf;
+	} while (ulNumChars >= 255);
+
+	return hRes;
+}
+
 STDMETHODIMP DeleteAfterSubmit(LPMAPIPROP lpMessage) {
 	SPropValue propDelete = {};
 	SPropTagArray sPropTagArray = { 1, PR_SENTMAIL_ENTRYID };
